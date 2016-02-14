@@ -1,0 +1,242 @@
+package boyw165.com.my_mosaic_stickers.view;
+
+import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.Matrix;
+import android.util.AttributeSet;
+import android.view.MotionEvent;
+import android.view.View;
+import android.widget.FrameLayout;
+
+import boyw165.com.my_mosaic_stickers.tool.LogUtils;
+import boyw165.com.my_mosaic_stickers.view_model.MosaicCache;
+import rx.Observable;
+import rx.Subscriber;
+import rx.android.schedulers.AndroidSchedulers;
+import rx.functions.Func1;
+import rx.schedulers.Schedulers;
+import rx.subjects.PublishSubject;
+import rx.subjects.SerializedSubject;
+import rx.subjects.Subject;
+import rx.subscriptions.CompositeSubscription;
+
+public class CollageLayout extends FrameLayout {
+
+    private static final int MOSAIC_FILTER = 0x00000001;
+    private static final int SOMEAA_FILTER = 0x00000002;
+    private static final int SOMEBB_FILTER = 0x00000004;
+
+    private int mFiltersFlag;
+
+    //    private Bitmap mDrawingCacheBmp;
+    private boolean isDrawingCacheDirty = true;
+    private MosaicCache mMosaicCache = new MosaicCache();
+
+    // For normal children views that have to be rendered into drawing cache.
+    private FrameLayout mLayer1;
+    // For special children views that are invisible to be rendered.
+    private FrameLayout mLayer2;
+
+    // TODO: Make a HOT observable doing image processing on demand.
+    private CompositeSubscription mSubscriptions = new CompositeSubscription();
+    private Subject<MosaicCache, MosaicCache> mMosaicSubject;
+
+    public CollageLayout(Context context) {
+        this(context, null, 0, 0);
+    }
+
+    public CollageLayout(Context context, AttributeSet attrs) {
+        this(context, attrs, 0, 0);
+    }
+
+    public CollageLayout(Context context, AttributeSet attrs, int defStyleAttr) {
+        this(context, attrs, defStyleAttr, 0);
+    }
+
+    public CollageLayout(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes) {
+        super(context, attrs, defStyleAttr, defStyleRes);
+
+        LayersHierarchyChange listener = new LayersHierarchyChange();
+        mLayer1 = new FrameLayout(context, attrs, defStyleAttr, defStyleRes);
+        mLayer1.setOnHierarchyChangeListener(listener);
+        mLayer2 = new FrameLayout(context, attrs, defStyleAttr, defStyleRes);
+        mLayer2.setOnHierarchyChangeListener(listener);
+
+        addView(mLayer1);
+        addView(mLayer2);
+
+        if (!isInEditMode()) {
+            PublishSubject<MosaicCache> subject = PublishSubject.create();
+            mMosaicSubject = new SerializedSubject<>(subject);
+        }
+    }
+
+    @Override
+    public boolean onInterceptTouchEvent(MotionEvent event) {
+        return super.onInterceptTouchEvent(event);
+    }
+
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        return super.onTouchEvent(event);
+    }
+
+    @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+    }
+
+    //    @Override
+//    public void onViewAdded(View child) {
+//        super.onViewAdded(child);
+//
+//        if (child instanceof MosaicView) {
+//            // Update the filters flag so that this container will update the
+//            // cached effects.
+//            mFiltersFlag |= MOSAIC_FILTER;
+//
+//            // Make children subscribe to the effect.
+//            ((MosaicView) child).subscribeToMosaic(mMosaicSubject);
+//
+//            invalidFilters();
+//        }
+//    }
+
+    public void addViewToLayer1(View child) {
+        mLayer1.addView(child);
+
+        // TODO: Debug mosaic effect.
+//        getMosaicCache()
+//            .observeOn(AndroidSchedulers.mainThread())
+//            .subscribe(new Subscriber<Bitmap>() {
+//                @Override
+//                public void onCompleted() {
+//
+//                }
+//
+//                @Override
+//                public void onError(Throwable e) {
+//
+//                }
+//
+//                @Override
+//                public void onNext(Bitmap bitmap) {
+//                    ImageView imageView = (ImageView) mLayer1.getChildAt(0);
+//                    imageView.setImageBitmap(mMosaicCache);
+//                }
+//            });
+    }
+
+    public void addViewToLayer2(View child) {
+        mLayer2.addView(child);
+    }
+
+    public void invalidFilters() {
+        if ((mFiltersFlag & MOSAIC_FILTER) == MOSAIC_FILTER) {
+            // Subscribe mosaic subject to the effect observable.
+            mSubscriptions.add(getMosaicCache()
+                                   .observeOn(AndroidSchedulers.mainThread())
+                                   .subscribe(mMosaicSubject));
+        }
+    }
+
+    public void unsubscribeAll() {
+        mSubscriptions.unsubscribe();
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // Private ////////////////////////////////////////////////////////////////
+
+    private Observable<Bitmap> getDrawingCacheBitmap() {
+        return Observable
+            .create(new Observable.OnSubscribe<Bitmap>() {
+                @Override
+                public void call(Subscriber<? super Bitmap> subscriber) {
+                    LogUtils.log("getDrawingCacheBitmap");
+                    Bitmap bitmap = null;
+
+                    if (isDrawingCacheDirty) {
+//                    // TODO: don't know if it is necessary to protect the drawing cache.
+                        // Check if need to re-new drawing cache.
+                        mLayer1.setDrawingCacheEnabled(true);
+                        bitmap = Bitmap.createBitmap(mLayer1.getDrawingCache());
+                        mLayer1.setDrawingCacheEnabled(false);
+
+                        isDrawingCacheDirty = false;
+
+                        // TODO: Any subscription leak?
+                    }
+
+                    if (!subscriber.isUnsubscribed()) {
+                        subscriber.onNext(bitmap);
+                    }
+                }
+            })
+            .subscribeOn(AndroidSchedulers.mainThread());
+    }
+
+    private Observable<MosaicCache> getMosaicCache() {
+        return getDrawingCacheBitmap()
+            .observeOn(Schedulers.computation())
+            .map(new Func1<Bitmap, MosaicCache>() {
+                @Override
+                public MosaicCache call(Bitmap bitmap) {
+                    LogUtils.log("getMosaicCache");
+
+                    if (mMosaicCache.cachedBmp == null && bitmap != null) {
+                        int scaleFactor = 1 << 4;
+                        Matrix scaleDown = new Matrix();
+                        Matrix scaleUp = new Matrix();
+                        scaleDown.setScale(1f / scaleFactor, 1f / scaleFactor);
+                        scaleUp.setScale(scaleFactor, scaleFactor);
+
+                        synchronized (CollageLayout.this) {
+                            try {
+                                mMosaicCache.cachedBmp = Bitmap.createBitmap(
+                                    bitmap, 0, 0,
+                                    bitmap.getWidth(),
+                                    bitmap.getHeight(),
+                                    scaleDown, false);
+                                mMosaicCache.scaleFactor = scaleFactor;
+                            } catch (Throwable throwable) {
+                                LogUtils.log(throwable.toString());
+                            }
+                        }
+
+                        // Recycle the drawing cache.
+                        bitmap.recycle();
+                    }
+
+                    mMosaicCache.canvasWidth = getMeasuredWidth();
+                    mMosaicCache.canvasHeight = getMeasuredHeight();
+
+                    return mMosaicCache;
+                }
+            });
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // Class //////////////////////////////////////////////////////////////////
+
+    private class LayersHierarchyChange implements OnHierarchyChangeListener {
+
+        @Override
+        public void onChildViewAdded(View parent, View child) {
+            if (child instanceof MosaicView) {
+                // Update the filters flag so that this container will update the
+                // cached effects.
+                mFiltersFlag |= MOSAIC_FILTER;
+
+                // Make children subscribe to the effect.
+                ((MosaicView) child).subscribeToMosaic(mMosaicSubject);
+
+                invalidFilters();
+            }
+        }
+
+        @Override
+        public void onChildViewRemoved(View parent, View child) {
+
+        }
+    }
+}
