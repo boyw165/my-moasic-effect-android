@@ -2,13 +2,16 @@ package boyw165.com.my_mosaic_stickers.view;
 
 import android.content.Context;
 import android.graphics.Bitmap;
+import android.graphics.Color;
 import android.graphics.Matrix;
+import android.graphics.Paint;
+import android.graphics.Path;
 import android.util.AttributeSet;
-import android.view.MotionEvent;
 import android.view.View;
 import android.widget.FrameLayout;
 
 import boyw165.com.my_mosaic_stickers.tool.LogUtils;
+import boyw165.com.my_mosaic_stickers.view.CollageMultiTouchListener.TransformInfo;
 import boyw165.com.my_mosaic_stickers.view_model.MosaicCache;
 import rx.Observable;
 import rx.Subscriber;
@@ -41,6 +44,12 @@ public class CollageLayout extends FrameLayout {
     private CompositeSubscription mSubscriptions = new CompositeSubscription();
     private Subject<MosaicCache, MosaicCache> mMosaicSubject;
 
+    // FIXME: Remove following debug codes.
+    private TransformInfo mTransformInfo = new TransformInfo();
+    private CollageMultiTouchListener mMultiTouchListener;
+    private Paint mDebugPaint;
+    private Path mDebugPath;
+
     public CollageLayout(Context context) {
         this(context, null, 0, 0);
     }
@@ -69,43 +78,37 @@ public class CollageLayout extends FrameLayout {
             PublishSubject<MosaicCache> subject = PublishSubject.create();
             mMosaicSubject = new SerializedSubject<>(subject);
         }
+
+        mDebugPaint = new Paint();
+        mDebugPaint.setColor(Color.rgb(0xFF, 0, 0));
+        mDebugPaint.setStyle(Paint.Style.STROKE);
+        mDebugPaint.setStrokeWidth(10);
+        mDebugPath = new Path();
+        mMultiTouchListener = new CollageMultiTouchListener(getContext(),
+                                                            mTransformInfo);
+        setOnTouchListener(mMultiTouchListener);
     }
 
-    @Override
-    public boolean onInterceptTouchEvent(MotionEvent event) {
-        return super.onInterceptTouchEvent(event);
-    }
-
-    @Override
-    public boolean onTouchEvent(MotionEvent event) {
-        return super.onTouchEvent(event);
-    }
-
-    @Override
-    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
-    }
-
-    //    @Override
-//    public void onViewAdded(View child) {
-//        super.onViewAdded(child);
+    // FIXME: Remove following debug codes.
+//    @Override
+//    protected void onDraw(Canvas canvas) {
+//        TransformInfo info = mTransformInfo;
 //
-//        if (child instanceof MosaicView) {
-//            // Update the filters flag so that this container will update the
-//            // cached effects.
-//            mFiltersFlag |= MOSAIC_FILTER;
-//
-//            // Make children subscribe to the effect.
-//            ((MosaicView) child).subscribeToMosaic(mMosaicSubject);
-//
-//            invalidFilters();
+//        if (info.deltaPos.x != 0 || info.deltaPos.y != 0) {
+//            float[] deltaVec = {info.deltaPos.x,
+//                                info.deltaPos.y};
+//            mDebugPath.reset();
+//            mDebugPath.moveTo(info.prevPos.x, info.prevPos.y);
+//            mDebugPath.lineTo(info.prevPos.x + info.deltaPos.x,
+//                         info.prevPos.y + info.deltaPos.y);
+//            canvas.drawPath(mDebugPath, mDebugPaint);
 //        }
 //    }
 
     public void addViewToLayer1(View child) {
         mLayer1.addView(child);
 
-        // TODO: Debug mosaic effect.
+        // FIXME: Debug mosaic effect.
 //        getMosaicCache()
 //            .observeOn(AndroidSchedulers.mainThread())
 //            .subscribe(new Subscriber<Bitmap>() {
