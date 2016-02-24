@@ -2,6 +2,7 @@ package boyw165.com.my_mosaic_stickers.view;
 
 import android.content.Context;
 import android.graphics.PointF;
+import android.support.annotation.NonNull;
 import android.support.v4.view.MotionEventCompat;
 import android.view.MotionEvent;
 import android.view.View;
@@ -36,6 +37,7 @@ public class CollageMultiTouchListener implements View.OnTouchListener {
     @Override
     public boolean onTouch(View view, MotionEvent event) {
         final int action = MotionEventCompat.getActionMasked(event);
+        TransformInfo info = mTransformInfo;
 
         // Start fresh.
         switch (action) {
@@ -61,7 +63,7 @@ public class CollageMultiTouchListener implements View.OnTouchListener {
                     // Save the ID of this pointer.
                     mActivePointerId0 = MotionEventCompat.getPointerId(event, 0);
                     // Remember where we started.
-                    mTransformInfo.prevPos.set(x, y);
+                    info.prevPos.set(x, y);
 
                     LogUtils.log(TAG, String.format("ACTION_DOWN"));
                     break;
@@ -78,14 +80,16 @@ public class CollageMultiTouchListener implements View.OnTouchListener {
                     float y1 = MotionEventCompat.getY(event, index1);
 
                     // Clean translation.
-                    mTransformInfo.deltaPos.set(0, 0);
+                    info.deltaPos.set(0, 0);
                     // Update span vector.
-                    mTransformInfo.prevSpanVec.set(x1 - x0, y1 - y0);
-                    mTransformInfo.currSpanVec.set(mTransformInfo.prevSpanVec);
+                    info.prevSpanVec.set(x1 - x0, y1 - y0);
+                    info.prevSpan = getVectorLength(info.prevSpanVec);
+                    info.currSpanVec.set(info.prevSpanVec);
+                    info.currSpan = getVectorLength(info.currSpanVec);
                     // Update pivot.
-                    mTransformInfo.prevPivot.set((x0 + x1) / 2,
-                                                 (y0 + y1) / 2);
-                    mTransformInfo.currPivot.set(mTransformInfo.prevPivot);
+                    info.prevPivot.set((x0 + x1) / 2,
+                                       (y0 + y1) / 2);
+                    info.currPivot.set(info.prevPivot);
                     mActivePointerId1 = id;
                     // Switch to scaling mode.
                     mIsScaleGestureInProgress = true;
@@ -101,27 +105,56 @@ public class CollageMultiTouchListener implements View.OnTouchListener {
                 }
                 case MotionEvent.ACTION_MOVE: {
                     // Do translation.
-                    if (TransformInfo.isValid(mTransformInfo.prevPos)) {
+                    if (TransformInfo.isValid(info.prevPos)) {
                         int index = MotionEventCompat.getActionIndex(event);
                         float x = MotionEventCompat.getX(event, index);
                         float y = MotionEventCompat.getY(event, index);
-                        float dx = x - mTransformInfo.prevPos.x;
-                        float dy = y - mTransformInfo.prevPos.y;
+                        float dx = x - info.prevPos.x;
+                        float dy = y - info.prevPos.y;
 
-                        mTransformInfo.deltaPos.set(dx, dy);
-                        LogUtils.log(TAG, "   TRANSLATING.");
+                        info.deltaPos.set(dx, dy);
                     }
                     break;
                 }
             }
         } else {
+            // When scaling...
             switch (action) {
                 case MotionEvent.ACTION_MOVE: {
+                    int index0 = MotionEventCompat.findPointerIndex(event, mActivePointerId0);
+                    int index1 = MotionEventCompat.findPointerIndex(event, mActivePointerId1);
+                    float x0 = MotionEventCompat.getX(event, index0);
+                    float y0 = MotionEventCompat.getY(event, index0);
+                    float x1 = MotionEventCompat.getX(event, index1);
+                    float y1 = MotionEventCompat.getY(event, index1);
+
+                    // Update pivot.
+                    info.currPivot.set((x0 + x1) / 2,
+                                       (y0 + y1) / 2);
+                    // Update span and span vector.
+                    info.currSpanVec.set(x1 - x0, y1 - y0);
+                    info.currSpan = getVectorLength(info.currSpanVec);
+                    // Update scale.
+                    float deltaScale = (info.currSpan - info.prevSpan) / info.prevSpan;
+                    info.deltaScale.set(deltaScale, deltaScale);
+                    // Update rotation according to given span vectors.
+                    info.deltaRotation = getVectorsAngle(info.prevSpanVec,
+                                                         info.currSpanVec);
+                    LogUtils.log(TAG, String.format("   MOVE: pt0=(%f, %f), pt1=(%f, %f)", x0, y0, x1, y1));
+                    LogUtils.log(TAG, String.format("         currPivot=%s", info.currPivot));
+
                     break;
                 }
                 case MotionEvent.ACTION_POINTER_UP: {
                     int index = MotionEventCompat.getActionIndex(event);
                     if (index == mActivePointerId0 || index == mActivePointerId1) {
+                        // TODO: Because it might back to translation mode, it
+                        // has to update prevPos and more.
+                        if (index == mActivePointerId0) {
+                            mActivePointerId0 = -1;
+                        } else if (index == mActivePointerId1) {
+                            mActivePointerId1 = -1;
+                        }
                         mIsScaleGestureInProgress = false;
                     }
                     break;
@@ -183,10 +216,27 @@ public class CollageMultiTouchListener implements View.OnTouchListener {
     ///////////////////////////////////////////////////////////////////////////
     // Statics ////////////////////////////////////////////////////////////////
 
-    public static void setTransform(View view, TransformInfo info) {
+    ///////////////////////////////////////////////////////////////////////////
+    // Private ////////////////////////////////////////////////////////////////
+
+    private void setTransform(View view, TransformInfo info) {
         boolean isChanged = false;
 
-        if (info.deltaPos.x != 0 || info.deltaPos.y != 0) {
+        // For translation, pivot change is always prior to position change.
+        if (TransformInfo.isValid(info.prevPivot) && TransformInfo.isValid(info.currPivot) &&
+            !info.prevPivot.equals(info.currPivot)) {
+            float[] deltaVec = {info.currPivot.x - info.prevPivot.x,
+                                info.currPivot.y - info.prevPivot.y};
+
+            // Update pivot translation.
+            view.getMatrix().mapVectors(deltaVec);
+            view.setTranslationX(view.getTranslationX() + deltaVec[0]);
+            view.setTranslationY(view.getTranslationY() + deltaVec[1]);
+            isChanged = true;
+
+            LogUtils.log(TAG, String.format("   PIVOT_TRANSLATION: prevPivot = %s.", info.prevPivot));
+            LogUtils.log(TAG, String.format("                      currPivot = %s.", info.currPivot));
+        } else if (info.deltaPos.x != 0 || info.deltaPos.y != 0) {
             float[] deltaVec = {info.deltaPos.x,
                                 info.deltaPos.y};
 
@@ -194,49 +244,49 @@ public class CollageMultiTouchListener implements View.OnTouchListener {
             view.setTranslationX(view.getTranslationX() + deltaVec[0]);
             view.setTranslationY(view.getTranslationY() + deltaVec[1]);
             isChanged = true;
+
+            LogUtils.log(TAG, String.format("   TRANSLATING (%f, %f).", deltaVec[0], deltaVec[1]));
         }
-//        if (info.deltaRotation != 0.0f) {
-//            view.setRotation(view.getRotation() + info.deltaRotation);
-//        }
-//        if (info.deltaScaleX != 0.0f || info.deltaScaleY != 0.0f) {
-//            float scaleX = view.getScaleX() + info.deltaScaleX;
-//            float scaleY = view.getScaleY() + info.deltaScaleY;
-//
-//            view.setScaleX(scaleX);
-//            view.setScaleY(scaleY);
-//        }
+
+        if (TransformInfo.isNonZero(info.deltaScale)) {
+            float scaleX = view.getScaleX() + info.deltaScale.x;
+            float scaleY = view.getScaleY() + info.deltaScale.y;
+
+            view.setScaleX(scaleX);
+            view.setScaleY(scaleY);
+            isChanged = true;
+
+            LogUtils.log(TAG, String.format("   SCALING (%f, %f).",
+                                            info.deltaScale.x,
+                                            info.deltaScale.y));
+        }
+
+        if (TransformInfo.isNonZero(info.deltaRotation)) {
+            float rotation = view.getRotation() + info.deltaRotation;
+
+            view.setRotation(rotation);
+            isChanged = true;
+
+            LogUtils.log(TAG, String.format("   ROTATING %f.", info.deltaRotation));
+        }
 
         if (isChanged) {
             view.invalidate();
         }
     }
 
-    public static float getVectorsAngle(PointF vecA, PointF vecB) {
+    private float getVectorsAngle(PointF vecA, PointF vecB) {
         if (vecA.x == vecB.x && vecA.y == vecB.y) {
             return 0;
         } else {
             return (float) (Math.toDegrees(
                 (Math.atan2(vecB.y, vecB.x) - Math.atan2(vecA.y, vecA.x))));
-//        float lenA = getVectorLength(vecA);
-//        float lenB = getVectorLength(vecB);
-//        return (float) (Math.toDegrees(
-//            (Math.acos((vecA.x * vecB.x + vecA.y * vecB.y) /
-//                       (lenA * lenB)))));
         }
     }
 
-//    public static float getVectorLength(PointF vec) {
-//        return (float) Math.hypot(vec.x, vec.y);
-//    }
-
-//    public static void normalizeVector(PointF vec) {
-//        float length = getVectorLength(vec);
-//        vec.x /= length;
-//        vec.y /= length;
-//    }
-
-    ///////////////////////////////////////////////////////////////////////////
-    // Private ////////////////////////////////////////////////////////////////
+    private float getVectorLength(PointF vec) {
+        return (float) Math.hypot(vec.x, vec.y);
+    }
 
     private void computeRenderOffset(View view, float pivotX, float pivotY) {
         if (view.getPivotX() == pivotX && view.getPivotY() == pivotY) {
@@ -267,13 +317,12 @@ public class CollageMultiTouchListener implements View.OnTouchListener {
      */
     public static class TransformInfo {
 
-        public static final float INVALID = Float.NaN;
+        public static final float INVALID = Float.MAX_VALUE;
 
         public PointF prevPos = new PointF(INVALID, INVALID);
-        public PointF deltaPos = new PointF(0, 0);
+        public PointF deltaPos = new PointF(0f, 0f);
 
-        public PointF prevScale = new PointF(INVALID, INVALID);
-        public PointF deltaScale = new PointF(0, 0);
+        public PointF deltaScale = new PointF(0f, 0f);
 
         public PointF prevPivot = new PointF(INVALID, INVALID);
         public PointF currPivot = new PointF(INVALID, INVALID);
@@ -281,16 +330,16 @@ public class CollageMultiTouchListener implements View.OnTouchListener {
         // Span vector which is used to calculate the rotation angle.
         public PointF prevSpanVec = new PointF(INVALID, INVALID);
         public PointF currSpanVec = new PointF(INVALID, INVALID);
+        public float prevSpan = 0;
+        public float currSpan = 0;
 
-        public float prevRotation = INVALID;
         public float deltaRotation;
 
         public void reset() {
             prevPos.set(INVALID, INVALID);
-            deltaPos.set(0, 0);
+            deltaPos.set(0f, 0f);
 
-            prevScale.set(INVALID, INVALID);
-            deltaScale.set(0, 0);
+            deltaScale.set(0f, 0f);
 
             prevPivot.set(INVALID, INVALID);
             currPivot.set(INVALID, INVALID);
@@ -298,15 +347,18 @@ public class CollageMultiTouchListener implements View.OnTouchListener {
             prevSpanVec.set(INVALID, INVALID);
             currSpanVec.set(INVALID, INVALID);
 
-            prevRotation = INVALID;
             deltaRotation = 0;
         }
 
         public static boolean isValid(PointF pt) {
-            return (pt.x != INVALID && pt.y != INVALID);
+            return (pt != null && pt.x != INVALID && pt.y != INVALID);
         }
 
-        public static boolean isValid(float num) {
+        public static boolean isNonZero(PointF pt) {
+            return (pt != null && pt.x != 0f && pt.y != 0f);
+        }
+
+        public static boolean isNonZero(float num) {
             return num != 0;
         }
     }

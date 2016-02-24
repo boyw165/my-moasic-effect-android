@@ -79,14 +79,14 @@ public class CollageLayout extends FrameLayout {
             mMosaicSubject = new SerializedSubject<>(subject);
         }
 
-        mDebugPaint = new Paint();
-        mDebugPaint.setColor(Color.rgb(0xFF, 0, 0));
-        mDebugPaint.setStyle(Paint.Style.STROKE);
-        mDebugPaint.setStrokeWidth(10);
-        mDebugPath = new Path();
-        mMultiTouchListener = new CollageMultiTouchListener(getContext(),
-                                                            mTransformInfo);
-        setOnTouchListener(mMultiTouchListener);
+//        mDebugPaint = new Paint();
+//        mDebugPaint.setColor(Color.rgb(0xFF, 0, 0));
+//        mDebugPaint.setStyle(Paint.Style.STROKE);
+//        mDebugPaint.setStrokeWidth(10);
+//        mDebugPath = new Path();
+//        mMultiTouchListener = new CollageMultiTouchListener(getContext(),
+//                                                            mTransformInfo);
+//        setOnTouchListener(mMultiTouchListener);
     }
 
     // FIXME: Remove following debug codes.
