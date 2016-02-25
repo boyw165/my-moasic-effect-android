@@ -23,7 +23,7 @@ public class MosaicView extends View {
 
     private Paint mOriginPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private Paint mPlaceholderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private Rect mBound = new Rect(0, 0, 800, 300);
+    private Rect mBound = new Rect(0, 0, 500, 500);
 
     private SomeModel mModel;
 
@@ -47,12 +47,13 @@ public class MosaicView extends View {
     public MosaicView(Context context, AttributeSet attrs) {
         super(context, attrs);
 
-        mOriginPaint.setColor(Color.argb(255, 255, 0, 0));
+        mOriginPaint.setColor(Color.rgb(255, 0, 0));
         mOriginPaint.setStyle(Paint.Style.STROKE);
         mOriginPaint.setStrokeWidth(15);
 
-        mPlaceholderPaint.setColor(Color.argb(128, 255, 255, 255));
+        mPlaceholderPaint.setColor(Color.rgb(0, 0, 0xFF));
         mPlaceholderPaint.setStyle(Paint.Style.STROKE);
+        mPlaceholderPaint.setStrokeWidth(15);
 
         mDrawingCachePaint.setAntiAlias(false);
         mDrawingCachePaint.setDither(false);
