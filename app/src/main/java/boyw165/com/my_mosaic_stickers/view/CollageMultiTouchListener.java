@@ -2,7 +2,6 @@ package boyw165.com.my_mosaic_stickers.view;
 
 import android.content.Context;
 import android.graphics.PointF;
-import android.support.annotation.NonNull;
 import android.support.v4.view.MotionEventCompat;
 import android.view.MotionEvent;
 import android.view.View;
@@ -16,10 +15,15 @@ public class CollageMultiTouchListener implements View.OnTouchListener {
 
     private static final String TAG = "MultiTouch";
 
-    private int mActivePointerId0 = -1;
-    private int mActivePointerId1 = -1;
-    private boolean mIsDragGestureInProgress = false;
-    private boolean mIsScaleGestureInProgress = false;
+    protected static final int STATE_OTHER = 0x10000001;
+    protected static final int STATE_SCALING = 0x10000002;
+    protected static final int STATE_DRAGGING = 0x10000004;
+    protected int mGestureState = STATE_OTHER;
+
+    protected static final int INVALID_ID = -1;
+    protected int mActivePointerId0 = INVALID_ID;
+    protected int mActivePointerId1 = INVALID_ID;
+
 
     /**
      * Transform information used by all gesture detectors.
@@ -46,13 +50,15 @@ public class CollageMultiTouchListener implements View.OnTouchListener {
             case MotionEvent.ACTION_UP: {
                 LogUtils.log(TAG, "ACTION_DOWN/ACTION_CANCEL/ACTION_UP: reset()");
                 mTransformInfo.reset();
-                mIsScaleGestureInProgress = false;
+                mActivePointerId0 = INVALID_ID;
+                mActivePointerId1 = INVALID_ID;
+                mGestureState = STATE_OTHER;
                 break;
             }
         }
 
         // Gesture detection.
-        if (!mIsScaleGestureInProgress) {
+        if (mGestureState == STATE_OTHER || mGestureState == STATE_DRAGGING) {
             // If it's in the progress of translation.
             switch (action) {
                 case MotionEvent.ACTION_DOWN: {
@@ -69,30 +75,13 @@ public class CollageMultiTouchListener implements View.OnTouchListener {
                     break;
                 }
                 case MotionEvent.ACTION_POINTER_DOWN: {
-                    int index0 = MotionEventCompat.findPointerIndex(event, mActivePointerId0);
                     // Always save latest pointer as active pointer #1.
                     int index1 = MotionEventCompat.getActionIndex(event);
-                    int id = MotionEventCompat.getPointerId(event, index1);
 
-                    float x0 = MotionEventCompat.getX(event, index0);
-                    float y0 = MotionEventCompat.getY(event, index0);
-                    float x1 = MotionEventCompat.getX(event, index1);
-                    float y1 = MotionEventCompat.getY(event, index1);
-
-                    // Clean translation.
-                    info.deltaPos.set(0, 0);
-                    // Update span vector.
-                    info.prevSpanVec.set(x1 - x0, y1 - y0);
-                    info.prevSpan = getVectorLength(info.prevSpanVec);
-                    info.currSpanVec.set(info.prevSpanVec);
-                    info.currSpan = getVectorLength(info.currSpanVec);
-                    // Update pivot.
-                    info.prevPivot.set((x0 + x1) / 2,
-                                       (y0 + y1) / 2);
-                    info.currPivot.set(info.prevPivot);
-                    mActivePointerId1 = id;
+                    mActivePointerId1 = MotionEventCompat.getPointerId(event, index1);
+                    updatePosPivotInfo(info, event, mActivePointerId0, mActivePointerId1);
                     // Switch to scaling mode.
-                    mIsScaleGestureInProgress = true;
+                    mGestureState = STATE_SCALING;
 
                     LogUtils.log(TAG, String.format("BEGIN_SCALE"));
                     break;
@@ -113,11 +102,12 @@ public class CollageMultiTouchListener implements View.OnTouchListener {
                         float dy = y - info.prevPos.y;
 
                         info.deltaPos.set(dx, dy);
+                        LogUtils.log(TAG, String.format("   DRAG_MOVE"));
                     }
                     break;
                 }
             }
-        } else {
+        } else if (mGestureState == STATE_SCALING) {
             // When scaling...
             switch (action) {
                 case MotionEvent.ACTION_MOVE: {
@@ -140,45 +130,62 @@ public class CollageMultiTouchListener implements View.OnTouchListener {
                     // Update rotation according to given span vectors.
                     info.deltaRotation = getVectorsAngle(info.prevSpanVec,
                                                          info.currSpanVec);
-                    LogUtils.log(TAG, String.format("   MOVE: pt0=(%f, %f), pt1=(%f, %f)", x0, y0, x1, y1));
-                    LogUtils.log(TAG, String.format("         currPivot=%s", info.currPivot));
 
+                    LogUtils.log(TAG, String.format("   SCALE_MOVE: pt0=(%f, %f), pt1=(%f, %f)", x0, y0, x1, y1));
+                    LogUtils.log(TAG, String.format("               currPivot=%s", info.currPivot));
+                    LogUtils.log(TAG, String.format("               deltaScale=%s", info.deltaScale));
+                    LogUtils.log(TAG, String.format("               deltaRotation=%f", info.deltaRotation));
                     break;
                 }
                 case MotionEvent.ACTION_POINTER_UP: {
+                    int index0 = MotionEventCompat.findPointerIndex(event, mActivePointerId0);
+                    int index1 = MotionEventCompat.findPointerIndex(event, mActivePointerId1);
                     int index = MotionEventCompat.getActionIndex(event);
-                    if (index == mActivePointerId0 || index == mActivePointerId1) {
-                        // TODO: Because it might back to translation mode, it
-                        // has to update prevPos and more.
-                        if (index == mActivePointerId0) {
-                            mActivePointerId0 = -1;
-                        } else if (index == mActivePointerId1) {
-                            mActivePointerId1 = -1;
+                    int id = MotionEventCompat.getPointerId(event, index);
+
+                    if (id == mActivePointerId0) {
+                        // Find new index except either current one or active index #1.
+                        int newIndex0 = findNewPointIndex(event, index, index1);
+
+                        if (newIndex0 >= 0) {
+                            // Update new id.
+                            mActivePointerId0 = MotionEventCompat.getPointerId(event, newIndex0);
+                            // Update info because active pointer #0 is considered
+                            // as previous position.
+                            updatePosPivotInfo(info, event, mActivePointerId0, mActivePointerId1);
+                        } else {
+                            if (mActivePointerId1 == INVALID_ID) {
+                                mActivePointerId0 = INVALID_ID;
+                                mGestureState = STATE_OTHER;
+
+                                info.reset();
+                            } else {
+                                // Replace active pointer #1.
+                                mActivePointerId0 = mActivePointerId1;
+                                mActivePointerId1 = INVALID_ID;
+                                mGestureState = STATE_DRAGGING;
+
+                                updatePosPivotInfo(info, event, mActivePointerId0, INVALID_ID);
+                            }
                         }
-                        mIsScaleGestureInProgress = false;
+                    } else if (id == mActivePointerId1) {
+                        // Find new index except either current one or active index #0.
+                        int newIndex1 = findNewPointIndex(event, index, index0);
+
+                        if (newIndex1 >= 0) {
+                            // Update new id.
+                            mActivePointerId1 = MotionEventCompat.getPointerId(event, newIndex1);
+
+                            updatePosPivotInfo(info, event, mActivePointerId0, mActivePointerId1);
+                        } else {
+                            mActivePointerId1 = INVALID_ID;
+                            mGestureState = STATE_DRAGGING;
+
+                            updatePosPivotInfo(info, event, mActivePointerId0, INVALID_ID);
+                        }
                     }
                     break;
                 }
-//                case MotionEvent.ACTION_POINTER_UP: {
-//                    final int index = MotionEventCompat.getActionIndex(event);
-//                    final int id = MotionEventCompat.getPointerId(event, index);
-//                    final int count = MotionEventCompat.getPointerCount(event);
-//
-//                    if (id == mActivePointerId0) {
-//                        // This was our active pointer going up. Choose a new
-//                        // active pointer (always the 2nd one) and adjust accordingly.
-//                        final int newIndex = (index == 0) ? 1 : 0;
-//                        final float x = MotionEventCompat.getX(event, newIndex);
-//                        final float y = MotionEventCompat.getY(event, newIndex);
-//
-//                        mPrevPoint.set(x, y);
-//                        mActivePointerId0 = MotionEventCompat.getPointerId(event, newIndex);
-//                    }
-//                    if (id == mActivePointerId1) {
-//                        mActivePointerId1 = -1;
-//                    }
-//                    break;
-//                }
             }
         }
 
@@ -188,36 +195,51 @@ public class CollageMultiTouchListener implements View.OnTouchListener {
         return true;
     }
 
-    public void onScale(TransformInfo info) {
-//        float scaleFactor = detector.getScaleFactor() - 1;
-//        float angle = getVectorsAngle(mPrevSpanVec, mCurrSpanVec);
-//        float dx = detector.getFocusX() - mPrevPivot.x;
-//        float dy = detector.getFocusY() - mPrevPivot.y;
-
-        // Apply transformation.
-//        mView.setScaleX(newScale);
-//        mView.setScaleY(newScale);
-//            CollageMultiTouchListener.setRotation(mView, rotation);
-//            computeRenderOffset(mView, mPrevPivotX, mPrevPivotY);
-//            CollageMultiTouchListener.setTranslation(mView, dx, dy);
-
-//        LogUtils.log(TAG, String.format("   onScale: angle=%f", angle));
-//        LogUtils.log(TAG, String.format("          : prevSpanVec=%s", mPrevSpanVec));
-//        LogUtils.log(TAG, String.format("          : currSpanVec=%s", mCurrSpanVec));
-//        LogUtils.log(TAG, String.format("          : scaleFactor=%s", detector.getScaleFactor()));
-//
-//        mTransformInfo.deltaX = dx;
-//        mTransformInfo.deltaY = dy;
-//        mTransformInfo.deltaScaleX = scaleFactor;
-//        mTransformInfo.deltaScaleY = scaleFactor;
-//        mTransformInfo.deltaRotation = angle;
-    }
-
     ///////////////////////////////////////////////////////////////////////////
     // Statics ////////////////////////////////////////////////////////////////
 
     ///////////////////////////////////////////////////////////////////////////
     // Private ////////////////////////////////////////////////////////////////
+
+    private int findNewPointIndex(MotionEvent event, int excludeIndex0, int excludeIndex1) {
+        int count = MotionEventCompat.getPointerCount(event);
+
+        for (int i = 0; i < count; ++i) {
+            if (i != excludeIndex0 && i != excludeIndex1) {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private void updatePosPivotInfo(TransformInfo info, MotionEvent event, int activePointer0, int activePointer1) {
+        int index0 = MotionEventCompat.findPointerIndex(event, activePointer0);
+        int index1 = MotionEventCompat.findPointerIndex(event, activePointer1);
+        float x0 = MotionEventCompat.getX(event, index0);
+        float y0 = MotionEventCompat.getY(event, index0);
+
+        // Reset info.
+        info.reset();
+        // Remember previous position (this might be a redundant operation but is
+        // still necessary for consistent initialization).
+        info.prevPos.set(x0, y0);
+
+        if (index1 != -1) {
+            float x1 = MotionEventCompat.getX(event, index1);
+            float y1 = MotionEventCompat.getY(event, index1);
+
+            // Update span vector.
+            info.prevSpanVec.set(x1 - x0, y1 - y0);
+            info.prevSpan = getVectorLength(info.prevSpanVec);
+            info.currSpanVec.set(info.prevSpanVec);
+            info.currSpan = getVectorLength(info.currSpanVec);
+            // Update pivot.
+            info.prevPivot.set((x0 + x1) / 2,
+                               (y0 + y1) / 2);
+            info.currPivot.set(info.prevPivot);
+        }
+    }
 
     private void setTransform(View view, TransformInfo info) {
         boolean isChanged = false;
@@ -233,9 +255,6 @@ public class CollageMultiTouchListener implements View.OnTouchListener {
             view.setTranslationX(view.getTranslationX() + deltaVec[0]);
             view.setTranslationY(view.getTranslationY() + deltaVec[1]);
             isChanged = true;
-
-            LogUtils.log(TAG, String.format("   PIVOT_TRANSLATION: prevPivot = %s.", info.prevPivot));
-            LogUtils.log(TAG, String.format("                      currPivot = %s.", info.currPivot));
         } else if (info.deltaPos.x != 0 || info.deltaPos.y != 0) {
             float[] deltaVec = {info.deltaPos.x,
                                 info.deltaPos.y};
@@ -244,8 +263,6 @@ public class CollageMultiTouchListener implements View.OnTouchListener {
             view.setTranslationX(view.getTranslationX() + deltaVec[0]);
             view.setTranslationY(view.getTranslationY() + deltaVec[1]);
             isChanged = true;
-
-            LogUtils.log(TAG, String.format("   TRANSLATING (%f, %f).", deltaVec[0], deltaVec[1]));
         }
 
         if (TransformInfo.isNonZero(info.deltaScale)) {
@@ -255,10 +272,6 @@ public class CollageMultiTouchListener implements View.OnTouchListener {
             view.setScaleX(scaleX);
             view.setScaleY(scaleY);
             isChanged = true;
-
-            LogUtils.log(TAG, String.format("   SCALING (%f, %f).",
-                                            info.deltaScale.x,
-                                            info.deltaScale.y));
         }
 
         if (TransformInfo.isNonZero(info.deltaRotation)) {
@@ -266,8 +279,6 @@ public class CollageMultiTouchListener implements View.OnTouchListener {
 
             view.setRotation(rotation);
             isChanged = true;
-
-            LogUtils.log(TAG, String.format("   ROTATING %f.", info.deltaRotation));
         }
 
         if (isChanged) {
@@ -286,27 +297,6 @@ public class CollageMultiTouchListener implements View.OnTouchListener {
 
     private float getVectorLength(PointF vec) {
         return (float) Math.hypot(vec.x, vec.y);
-    }
-
-    private void computeRenderOffset(View view, float pivotX, float pivotY) {
-        if (view.getPivotX() == pivotX && view.getPivotY() == pivotY) {
-            return;
-        }
-
-        float[] prevPoint = {0.0f, 0.0f};
-        view.getMatrix().mapPoints(prevPoint);
-
-        view.setPivotX(pivotX);
-        view.setPivotY(pivotY);
-
-        float[] currPoint = {0.0f, 0.0f};
-        view.getMatrix().mapPoints(currPoint);
-
-        float offsetX = currPoint[0] - prevPoint[0];
-        float offsetY = currPoint[1] - prevPoint[1];
-
-        view.setTranslationX(view.getTranslationX() - offsetX);
-        view.setTranslationY(view.getTranslationY() - offsetY);
     }
 
     ///////////////////////////////////////////////////////////////////////////
