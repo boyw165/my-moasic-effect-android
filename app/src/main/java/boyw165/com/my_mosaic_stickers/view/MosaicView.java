@@ -23,7 +23,7 @@ public class MosaicView extends View {
 
     private Paint mOriginPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private Paint mPlaceholderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private Rect mBound = new Rect(0, 0, 800, 300);
+    private Rect mBound = new Rect(0, 0, 500, 500);
 
     private SomeModel mModel;
 

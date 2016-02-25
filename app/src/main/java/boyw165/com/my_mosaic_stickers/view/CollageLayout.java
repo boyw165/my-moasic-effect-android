@@ -187,7 +187,7 @@ public class CollageLayout extends FrameLayout {
                     LogUtils.log("getMosaicCache");
 
                     if (mMosaicCache.cachedBmp == null && bitmap != null) {
-                        int scaleFactor = 1 << 4;
+                        int scaleFactor = 1 << 5;
                         Matrix scaleDown = new Matrix();
                         Matrix scaleUp = new Matrix();
                         scaleDown.setScale(1f / scaleFactor, 1f / scaleFactor);
