@@ -125,7 +125,9 @@ public class MosaicView extends View {
             public void onNext(MosaicCache mosaicCache) {
                 LogUtils.log("onNext");
 
-                mDrawingCache = mosaicCache;
+                if (mDrawingCache == null) {
+                    mDrawingCache = mosaicCache;
+                }
 
                 invalidate();
             }
