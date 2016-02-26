@@ -2,13 +2,15 @@ package boyw165.com.my_mosaic_stickers.view;
 
 import android.content.Context;
 import android.graphics.Bitmap;
-import android.graphics.Color;
 import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.util.AttributeSet;
 import android.view.View;
 import android.widget.FrameLayout;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import boyw165.com.my_mosaic_stickers.tool.LogUtils;
 import boyw165.com.my_mosaic_stickers.view.CollageMultiTouchListener.TransformInfo;
@@ -33,7 +35,16 @@ public class CollageLayout extends FrameLayout {
 
     //    private Bitmap mDrawingCacheBmp;
     private boolean isDrawingCacheDirty = true;
-    private MosaicCache mMosaicCache = new MosaicCache();
+    private MosaicCache mMosaicCacheLv1 = new MosaicCache();
+    private MosaicCache mMosaicCacheLv2 = new MosaicCache();
+    private MosaicCache mMosaicCacheLv3 = new MosaicCache();
+    private int mMosaicIndex = 0;
+    private List<MosaicCache> mMosaicCaches = new ArrayList<>();
+    {
+        mMosaicCaches.add(mMosaicCacheLv1);
+        mMosaicCaches.add(mMosaicCacheLv2);
+        mMosaicCaches.add(mMosaicCacheLv3);
+    }
 
     // For normal children views that have to be rendered into drawing cache.
     private FrameLayout mLayer1;
@@ -125,7 +136,7 @@ public class CollageLayout extends FrameLayout {
 //                @Override
 //                public void onNext(Bitmap bitmap) {
 //                    ImageView imageView = (ImageView) mLayer1.getChildAt(0);
-//                    imageView.setImageBitmap(mMosaicCache);
+//                    imageView.setImageBitmap(mMosaicCacheLv1);
 //                }
 //            });
     }
@@ -165,7 +176,7 @@ public class CollageLayout extends FrameLayout {
                         bitmap = Bitmap.createBitmap(mLayer1.getDrawingCache());
                         mLayer1.setDrawingCacheEnabled(false);
 
-                        isDrawingCacheDirty = false;
+//                        isDrawingCacheDirty = false;
 
                         // TODO: Any subscription leak?
                     }
@@ -185,9 +196,10 @@ public class CollageLayout extends FrameLayout {
                 @Override
                 public MosaicCache call(Bitmap bitmap) {
                     LogUtils.log("getMosaicCache");
+                    MosaicCache cache = mMosaicCaches.get(mMosaicIndex);
 
-                    if (mMosaicCache.cachedBmp == null && bitmap != null) {
-                        int scaleFactor = 1 << 5;
+                    if (cache.cachedBmp == null && bitmap != null) {
+                        int scaleFactor = 1 << (mMosaicIndex + 4);
                         Matrix scaleDown = new Matrix();
                         Matrix scaleUp = new Matrix();
                         scaleDown.setScale(1f / scaleFactor, 1f / scaleFactor);
@@ -195,12 +207,12 @@ public class CollageLayout extends FrameLayout {
 
                         synchronized (CollageLayout.this) {
                             try {
-                                mMosaicCache.cachedBmp = Bitmap.createBitmap(
+                                cache.scaleFactor = scaleFactor;
+                                cache.cachedBmp = Bitmap.createBitmap(
                                     bitmap, 0, 0,
                                     bitmap.getWidth(),
                                     bitmap.getHeight(),
                                     scaleDown, false);
-                                mMosaicCache.scaleFactor = scaleFactor;
                             } catch (Throwable throwable) {
                                 LogUtils.log(throwable.toString());
                             }
@@ -208,12 +220,18 @@ public class CollageLayout extends FrameLayout {
 
                         // Recycle the drawing cache.
                         bitmap.recycle();
+                        System.gc();
+
+                        // Update index.
+                        if (++mMosaicIndex >= mMosaicCaches.size()) {
+                            mMosaicIndex = 0;
+                        }
                     }
 
-                    mMosaicCache.canvasWidth = getMeasuredWidth();
-                    mMosaicCache.canvasHeight = getMeasuredHeight();
+                    cache.canvasWidth = getMeasuredWidth();
+                    cache.canvasHeight = getMeasuredHeight();
 
-                    return mMosaicCache;
+                    return cache;
                 }
             });
     }
