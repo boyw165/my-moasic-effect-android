@@ -21,19 +21,21 @@ public class MosaicView extends View {
 
     private static final String TAG = "MosaicView";
 
-    private Paint mOriginPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private Paint mPlaceholderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private Rect mBound = new Rect(0, 0, 500, 500);
+    protected CollageMultiTouchListener mMultiTouchListener;
 
-    private SomeModel mModel;
+    protected Paint mOriginPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    protected Paint mPlaceholderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    protected Rect mBound = new Rect(0, 0, 700, 700);
 
-    private MosaicCache mDrawingCache;
-    private Paint mDrawingCachePaint = new Paint();
-    private Path mDrawingCachePath;
+    protected SomeModel mModel;
 
-    private Matrix mDrawingMtx = new Matrix();
-    private final Rect mDrawingSrcRect = new Rect();
-    private final Rect mDrawingDstRect = new Rect();
+    protected MosaicCache mDrawingCache;
+    protected Paint mDrawingCachePaint = new Paint();
+    protected Path mDrawingCachePath;
+
+    protected Matrix mDrawingMtx = new Matrix();
+    protected final Rect mDrawingSrcRect = new Rect();
+    protected final Rect mDrawingDstRect = new Rect();
 
     public MosaicView(Context context) {
         this(context, null);
@@ -64,7 +66,8 @@ public class MosaicView extends View {
         setLayoutParams(params);
 
         // Initial generic multi-touch function.
-        setOnTouchListener(new CollageMultiTouchListener(getContext()));
+        mMultiTouchListener = new CollageMultiTouchListener(getContext());
+        setOnTouchListener(mMultiTouchListener);
     }
 
     @Override
@@ -127,9 +130,12 @@ public class MosaicView extends View {
 
                 if (mDrawingCache == null) {
                     mDrawingCache = mosaicCache;
-                }
+                    mMultiTouchListener.setScaleLimit(
+                        1.0f,
+                        2.5f);
 
-                invalidate();
+                    invalidate();
+                }
             }
         });
     }
