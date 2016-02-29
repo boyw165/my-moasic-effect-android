@@ -34,7 +34,7 @@ public class CollageLayout extends FrameLayout {
     private int mFiltersFlag;
 
     //    private Bitmap mDrawingCacheBmp;
-    private boolean isDrawingCacheDirty = true;
+    private boolean mIsDrawingCacheDirty = true;
     private MosaicCache mMosaicCacheLv1 = new MosaicCache();
     private MosaicCache mMosaicCacheLv2 = new MosaicCache();
     private MosaicCache mMosaicCacheLv3 = new MosaicCache();
@@ -169,14 +169,14 @@ public class CollageLayout extends FrameLayout {
                     LogUtils.log("getDrawingCacheBitmap");
                     Bitmap bitmap = null;
 
-                    if (isDrawingCacheDirty) {
+                    if (mIsDrawingCacheDirty) {
 //                    // TODO: don't know if it is necessary to protect the drawing cache.
                         // Check if need to re-new drawing cache.
                         mLayer1.setDrawingCacheEnabled(true);
                         bitmap = Bitmap.createBitmap(mLayer1.getDrawingCache());
                         mLayer1.setDrawingCacheEnabled(false);
 
-//                        isDrawingCacheDirty = false;
+                        mIsDrawingCacheDirty = false;
 
                         // TODO: Any subscription leak?
                     }
@@ -243,6 +243,8 @@ public class CollageLayout extends FrameLayout {
 
         @Override
         public void onChildViewAdded(View parent, View child) {
+            mIsDrawingCacheDirty = true;
+
             if (child instanceof MosaicView) {
                 // Update the filters flag so that this container will update the
                 // cached effects.
