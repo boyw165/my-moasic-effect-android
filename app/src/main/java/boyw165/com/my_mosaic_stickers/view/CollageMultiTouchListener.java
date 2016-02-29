@@ -38,6 +38,11 @@ public class CollageMultiTouchListener implements View.OnTouchListener {
         // DO NOTHING.
     }
 
+    public CollageMultiTouchListener(Context context, float minScale, float maxScale) {
+        mMinScale = minScale;
+        mMaxScale = maxScale;
+    }
+
     public CollageMultiTouchListener(Context context, TransformInfo info) {
         mTransformInfo = info;
     }
