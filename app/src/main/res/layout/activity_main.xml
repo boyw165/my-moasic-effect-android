@@ -37,7 +37,7 @@
             <!--android:layout_width="wrap_content"-->
             <!--android:layout_height="wrap_content"-->
             <!--android:scaleType="centerCrop"-->
-            <!--android:src="@drawable/bn_sample_scrap"/>-->
+            <!--android:src="@drawable/sample_scrap"/>-->
     </boyw165.com.my_mosaic_stickers.view.CollageLayout>
 
     <LinearLayout
@@ -55,7 +55,7 @@
             android:layout_weight="1"
             android:scaleType="centerInside"
             android:background="@android:color/transparent"
-            android:src="@drawable/bn_editor_plus"/>
+            android:src="@drawable/btn_quick_menu"/>
 
         <!--<TextView-->
             <!--android:layout_width="match_parent"-->
