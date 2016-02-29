@@ -30,7 +30,7 @@ public class PopupMenu extends PopupWindow {
     }
 
     /**
-     * Set {@code View.OnClickListener} to children views with valid id of the
+     * Set {@link View.OnClickListener} to children views with valid id of the
      * content view.
      */
     public void setOnClickListener(final View.OnClickListener listener) {
@@ -56,7 +56,7 @@ public class PopupMenu extends PopupWindow {
     }
 
     /**
-     * Set {@code View.OnClickListener} to view according to given id.
+     * Set {@link View.OnClickListener} to view according to given id.
      * @param id        The id of target view.
      * @param listener  The listener that will run.
      */
@@ -76,7 +76,7 @@ public class PopupMenu extends PopupWindow {
     }
 
     /**
-     * Show the {@code PopupWindow} by the given view.
+     * Show the {@link PopupWindow} by the given view.
      * @param parent    The given view to be shown by.
      */
     public void showByView(View parent) {
